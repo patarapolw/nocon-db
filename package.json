@@ -1,7 +1,7 @@
 {
-  "name": "noodm",
-  "version": "0.2.3",
-  "description": "Simple ORM for SQLite with decorators and TypeScript interfaces",
+  "name": "nocon-db",
+  "version": "0.1.0",
+  "description": "NoSQL local file storage with constraints -- unique keys, null check and indexing, akin to SQLite, with API similar to liteorm",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -17,7 +17,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/patarapolw/noodm.git"
+    "url": "git+https://github.com/patarapolw/nocon-db.git"
   },
   "dependencies": {
     "@types/lodash.clonedeep": "^4.5.6",
