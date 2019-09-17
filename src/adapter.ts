@@ -22,7 +22,7 @@ export abstract class BaseAdapter {
   abstract serialize(data: any): Promise<void>;
   abstract deserialize(): Promise<any>;
 
-  idGenerator(entry: Record<string, any>): Promise<string> | string {
+  idGenerator(entry: Record<string, any>): string {
     return slugid.v4();
   }
 }
