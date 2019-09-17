@@ -94,6 +94,14 @@ export class Collection<T> extends Emittery.Typed<{
     this.db.save();
 
     this.on("pre-insert", async (p) => {
+      if ((p.entry as any)._id) {
+        const id = (p.entry as any)._id;
+        if (this.data[id]) {
+          p.prevent = true;
+          return;
+        }
+      }
+
       for (const [k, attr] of Object.entries<IField<any> | undefined>(this.__meta.fields)) {
         if (attr && p.entry[k as keyof T] === undefined) {
           p.entry[k as keyof T] = attr.default;
@@ -135,6 +143,14 @@ export class Collection<T> extends Emittery.Typed<{
     });
     this.on("pre-update", async (p) => {
       if (typeof p.set === "object") {
+        if ((p.set as any)._id) {
+          const id = (p.set as any)._id;
+          if (this.data[id]) {
+            p.prevent = true;
+            return;
+          }
+        }
+
         for (const [k, attr] of Object.entries<IField<any> | undefined>(this.__meta.fields)) {
           if (attr && p.set[k] === undefined) {
             p.set[k] = attr.onUpdate;
@@ -163,19 +179,19 @@ export class Collection<T> extends Emittery.Typed<{
       }
     });
     this.on("post-update", async (p) => {
-      await this.removeIndex(p.cond);
+      await this.removeIndex(p.updated);
       for (const entry of p.updated) {
         await this.addIndex(entry);
       }
     });
     this.on("post-delete", async (p) => {
-      await this.removeIndex(p.cond);
+      await this.removeIndex(p.deleted);
     });
   }
 
   public async insert(entry: T): Promise<T & {_id: string}> {
     const p = {entry, prevent: false};
-    let id: string = await this.db.adapter.idGenerator(entry);
+    let id: string = (entry as any)._id || await this.db.adapter.idGenerator(entry);
 
     await this.emit("pre-insert", p);
 
@@ -309,6 +325,26 @@ export class Collection<T> extends Emittery.Typed<{
     return r ? (r[0] || null) : null;
   }
 
+  public async getById(_id: string): Promise<T | null> {
+    const p = {cond: {_id}, prevent: false}
+    await this.emit("pre-find", p);
+    if (!p.prevent) {
+      if (!this.data[_id]) {
+        return null;
+      }
+
+      const r = {
+        ...this.data[_id],
+        _id
+      };
+      
+      await this.emit("post-find", {cond: {_id}, result: [r]});
+      return r;
+    }
+
+    return null;
+  }
+
   public async update(cond: any, set: any): Promise<void> {
     const p = {cond, set, prevent: false};
     await this.emit("pre-update", p);
@@ -401,9 +437,7 @@ export class Collection<T> extends Emittery.Typed<{
     this.db.save();
   }
 
-  private async removeIndex(cond: any) {
-    const entries = await this.find(cond) || [];
-
+  private async removeIndex(entries: Array<T & {_id: string}>) {
     for (const entry of entries) {
       for (const [k, ix] of Object.entries<{
         [data in string | number]: {

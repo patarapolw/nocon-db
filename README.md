@@ -4,7 +4,9 @@ NoSQL local file storage with constraints -- unique keys, null check and indexin
 
 Can save as BSON with `BsonAdapter`.
 
-Filtering and mapping (in `find`, `update`, `delete`) is possible, thanks to `lodash`.
+Filtering and mapping with objects (in `find`, `update`, `delete`) is possible, thanks to `lodash`.
+
+If you need typings, you can also enforce `constraints`.
 
 ## Usage
 
