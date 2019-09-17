@@ -20,7 +20,9 @@ export class Db {
   }
 
   async load() {
-    this.data = await this.adapter.deserialize();
+    try {
+      this.data = await this.adapter.deserialize();
+    } catch(e) {}
   }
 
   async save() {

@@ -2,6 +2,8 @@ import { promisify } from "util";
 import fs from "fs";
 import "./types";
 import slugid from "slugid";
+import {encode, decode} from "base64-arraybuffer";
+
 let bson: any;
 try {
   bson = require("bson");
@@ -9,7 +11,7 @@ try {
 
 export interface ITransformer<T> {
   get: (repr?: string) => T | undefined;
-  set: (data: T) => string | undefined;
+  set: (data?: T) => string | undefined;
 }
 
 export abstract class BaseAdapter {
@@ -79,6 +81,23 @@ export class BsonAdapter extends FSBinaryAdapter {
 }
 
 export class JsonAdapter extends FSAdapter {
+  transformers = {
+    Date: {
+      set: (data?: Date) => data ? JSON.stringify({
+        $type: "Date",
+        $string: data.toISOString()
+      }) : undefined,
+      get: (repr?: string) => repr ? new Date(JSON.parse(repr).$string) : undefined
+    },
+    ArrayBuffer: {
+      set: (data?: ArrayBuffer) => data ? JSON.stringify({
+        $type: "ArrayBuffer",
+        $string: encode(data)
+      }) : undefined,
+      get: (repr?: string) => repr ? decode(JSON.parse(repr).$string) : undefined
+    }
+  }
+
   _serializer = JSON.stringify;
   _deserializer = JSON.parse;
 }

@@ -33,14 +33,27 @@ export class Collection<T> extends Emittery.Typed<{
   "pre-delete": { cond: any, prevent: boolean },
   "post-delete": { cond: any, deleted: Array<T & {_id: string}> },
 }> {
+  public db: Db;
   public name: string;
   public __meta: IColMetaSchema<T>;
   public data: Record<string, Record<keyof T, any>>;
 
-  constructor(public db: Db, model: T | string) {
+  constructor(db: Db, model: T | string) {
     super();
-    if (typeof model !== "string") {
+    this.db = db;
+
+    if (typeof model === "string") {
+      this.name = model;
+      this.__meta = (this.db.data[this.name] || {}).__meta || {
+        index: {},
+        fields: {}
+      };
+    } else {
       const {__meta} = model as any;
+      if (!__meta) {
+        throw new Error("'__meta' must be defined. See @Table()")
+      }
+
       const {name, fields} = __meta;
       this.name = name;
 
@@ -52,13 +65,10 @@ export class Collection<T> extends Emittery.Typed<{
       for (const [name, attr] of Object.entries<IField<any> | undefined>(fields)) {
         if (attr) {
           if (attr.unique || attr.indexed) {
-            this.__meta.index[name as keyof T] = {};
+            this.__meta.index[name as keyof T] = this.__meta.index[name as keyof T] || {};
           }
         }
-      }
-    } else {
-      this.name = model;
-      this.__meta = this.db.data[this.name].__meta;
+      } 
     }
 
     this.db.cols[this.name] = this;
@@ -71,6 +81,16 @@ export class Collection<T> extends Emittery.Typed<{
     }
 
     this.data = this.db.data[this.name].data;
+    this.__meta = this.db.data[this.name].__meta;
+
+    for (const [name, attr] of Object.entries<IField<any> | undefined>(this.__meta.fields)) {
+      if (attr) {
+        if (attr.unique || attr.indexed) {
+          this.__meta.index[name as keyof T] = this.__meta.index[name as keyof T] || {};
+        }
+      }
+    } 
+
     this.db.save();
 
     this.on("pre-insert", async (p) => {
@@ -81,10 +101,15 @@ export class Collection<T> extends Emittery.Typed<{
       }
 
       for (const [k, v] of Object.entries(p.entry)) {
-        const field = this.__meta.fields[k as keyof T]!;
+        const field = this.__meta.fields[k as keyof T];
         if (field) {
-          const { type } = field;
+          let type: string = "";
+          type = field.type || "";
 
+          if (!type && v.constructor) {
+            type = v.constructor.name;
+          }
+  
           let constraints: any[] = [...(field.constraints || [])];
           if (type && this.db.adapter && this.db.adapter.constraints[type]) {
             constraints = [...constraints, ...(this.db.adapter.constraints[type] || [])];
@@ -95,7 +120,7 @@ export class Collection<T> extends Emittery.Typed<{
               (el: any) => el !== null && el !== undefined
             ]
           }
-
+  
           if (constraints.some((c) => !c(v))) {
             p.prevent = true;
             return;
@@ -157,17 +182,29 @@ export class Collection<T> extends Emittery.Typed<{
     if (!p.prevent) {
       const realEntry: Record<keyof T, any> = entry;
 
-      for (const [k, v] of Object.entries<IField<any> | undefined>(this.__meta.fields)) {
-        if (v) {
+      for (const [k, field] of Object.entries<IField<any> | undefined>(this.__meta.fields)) {
+        if (field) {
           if (realEntry[k as keyof T] === undefined) {
-            if (v.default !== undefined) {
-              realEntry[k as keyof T] = v.default;
-            }
-          } else if (v.type) {
-            if (this.db.adapter && this.db.adapter.transformers[v.type]) {
-              realEntry[k as keyof T] = this.db.adapter.transformers[v.type].set(p.entry[k as keyof T]);
+            if (field.default !== undefined) {
+              realEntry[k as keyof T] = field.default;
             }
           }
+        }
+      }
+
+      for (const [k, v] of Object.entries<any>(realEntry)) {
+        let type: string = "";
+        const field = this.__meta.fields[k as keyof T];
+        if (field) {
+          type = field.type || "";
+        }
+
+        if (!type && v.constructor) {
+          type = v.constructor.name;
+        }
+
+        if (type && this.db.adapter && this.db.adapter.transformers[type]) {
+          realEntry[k as keyof T] = this.db.adapter.transformers[type].set(v);
         }
       }
 
@@ -186,7 +223,7 @@ export class Collection<T> extends Emittery.Typed<{
     throw new Error(`Cannot insert: ${JSON.stringify(entry)}`);
   }
 
-  public async find(cond: any): Promise<Array<T & {_id: string}>> {
+  public async find(cond?: any): Promise<Array<T & {_id: string}>> {
     const p = {cond, prevent: false};
     await this.emit("pre-find", p);
     let result: Array<T & {_id: string}> = [];
@@ -241,13 +278,22 @@ export class Collection<T> extends Emittery.Typed<{
       }
 
       for (const entry of result) {
-        for (const [k, v] of Object.entries(entry)) {
+        for (const [k, v] of Object.entries<any>(entry)) {
+          let type: string = "";
           const field = this.__meta.fields[k as keyof T]!;
+
           if (field) {
-            const { type } = field;
-            if (type && this.db.adapter.transformers[type]) {
-              entry[k as keyof T] = this.db.adapter.transformers[type].get(v);
-            }
+            type = field.type || "";
+          }
+
+          if (!type && typeof v === "string") {
+            try {
+              type = JSON.parse(v).$type;
+            } catch(e) {}
+          }
+
+          if (type && this.db.adapter.transformers[type]) {
+            entry[k as keyof T] = this.db.adapter.transformers[type].get(v);
           }
         }
       }
@@ -324,20 +370,14 @@ export class Collection<T> extends Emittery.Typed<{
    * @param entry 
    * @returns Whether unique index is violated
    */
-  private async checkIndex(entry: Partial<T>): Promise<boolean> {
-    const r = await this.find(entry) || [];
-    const uDict: {[k in keyof T]?: string | number} = {};
-
-    for (const c of r) {
-      for (const [k, v] of Object.entries(c)) {
+  private async checkIndex(entry: T & {_id?: string}): Promise<boolean> {
+    for (const [k, v] of Object.entries(entry)) {
+      if (v) {
         const f = this.__meta.fields[k as keyof T];
         if (f && f.unique) {
-          if (uDict[k as keyof T] !== undefined) {
-            if (uDict[k as keyof T] !== v) {
-              return true;
-            }
-          } else {
-            uDict[k as keyof T] = v;
+          const ix = this.__meta.index[k as keyof T];
+          if (ix && Object.keys(ix!).length > 0) {
+            return true;
           }
         }
       }
@@ -347,19 +387,14 @@ export class Collection<T> extends Emittery.Typed<{
   }
 
   private async addIndex(entry: T & {_id: string}) {
-    for (const [k, v] of Object.entries<{
+    for (const [k, ix] of Object.entries<{
       [data in string | number]: {
         [id: string]: 1;
       }
     } | undefined>(this.__meta.index)) {
-      if (v && entry[k as keyof T]) {
-        v[(entry as any)[k]] = v[entry[k as keyof T] as any] || {};
-
-        const f = this.__meta.fields[k as keyof T];
-        if (f && f.unique && Object.keys(v[entry[k as keyof T] as any]).length > 1) {
-          return;
-        }
-        v[entry[k as keyof T] as any][entry._id] = 1;
+      if (ix && entry[k as keyof T]) {
+        this.__meta.index[k as keyof T]![entry[k as keyof T] as any] = ix[entry[k as keyof T] as any] || {};
+        ix[entry[k as keyof T] as any][entry._id] = 1;
       }
     }
 
@@ -370,13 +405,14 @@ export class Collection<T> extends Emittery.Typed<{
     const entries = await this.find(cond) || [];
 
     for (const entry of entries) {
-      for (const [k, v] of Object.entries<{
+      for (const [k, ix] of Object.entries<{
         [data in string | number]: {
           [id: string]: 1;
         }
       } | undefined>(this.__meta.index)) {
-        if (v && entry[k as keyof T]) {
-          delete v[entry[k as keyof T] as any][entry._id];
+        if (ix && entry[k as keyof T]) {
+          ix[entry[k as keyof T] as any] = ix[entry[k as keyof T] as any] || {};
+          delete ix[entry[k as keyof T] as any][entry._id];
         }
       }
     }
