@@ -1,0 +1,37 @@
+{
+  "name": "noodm",
+  "version": "0.2.3",
+  "description": "Simple ORM for SQLite with decorators and TypeScript interfaces",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "test": "ts-mocha tests/**/*.spec.ts",
+    "build": "tsc -p tsconfig.lib.json"
+  },
+  "keywords": [
+    "nosql",
+    "odm"
+  ],
+  "author": "Pacharapol Withayasakpunt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/patarapolw/noodm.git"
+  },
+  "dependencies": {
+    "@types/lodash.clonedeep": "^4.5.6",
+    "@types/lodash.filter": "^4.6.6",
+    "@types/lodash.map": "^4.6.13",
+    "@types/node": "^12.7.5",
+    "emittery": "^0.4.1",
+    "lodash.clonedeep": "^4.5.0",
+    "lodash.filter": "^4.6.0",
+    "lodash.map": "^4.6.0",
+    "reflect-metadata": "^0.1.13",
+    "slugid": "^2.0.0"
+  },
+  "devDependencies": {
+    "bson": "^4.0.2"
+  }
+}
