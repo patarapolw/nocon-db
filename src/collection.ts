@@ -24,10 +24,10 @@ export interface IField<T> {
 }
 
 export class Collection<T> extends Emittery.Typed<{
-  "pre-insert": { entries?: T[] },
-  "post-insert": { entries?: Array<T & {_id: string}> },
-  "pre-find": { cond?: any },
-  "post-find": { cond?: any, result: Array<T & {_id: string}> },
+  "pre-insert": { entries: T[] },
+  "post-insert": { entries: Array<T & {_id: string}> },
+  "pre-find": { cond: any },
+  "post-find": { cond: any, result: Array<T & {_id: string}> },
   "pre-update": { cond: any, set: any },
   "post-update": { cond: any, set: any, updated: Array<T & {_id: string}> },
   "pre-delete": { cond: any },
@@ -111,7 +111,7 @@ export class Collection<T> extends Emittery.Typed<{
     return newEntries.map((el) => el._id);
   }
 
-  public async find(cond?: any): Promise<Array<T & {_id: string}>> {
+  public async find(cond: any = {}): Promise<Array<T & {_id: string}>> {
     await this.emit("pre-find", {cond});
     const result = this._find(cond);
     await this.emit("post-find", {cond, result});
