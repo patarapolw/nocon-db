@@ -1,6 +1,6 @@
 {
   "name": "nocon-db",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "NoSQL local file storage with constraints -- unique keys, null check and indexing, akin to SQLite, with API similar to liteorm",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

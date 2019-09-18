@@ -111,6 +111,25 @@ export class Collection<T> extends Emittery.Typed<{
     return newEntries.map((el) => el._id);
   }
 
+  public async getOrCreate(entry: T, cond?: any): Promise<T & {_id: string}> {
+    const es = await this.find(cond ? cond : entry);
+
+    let output: T & {_id: string} = es[0];
+    if (!es[0]) {
+      const _id = await this.insertOne(entry);
+      output = {
+        ...entry,
+        _id
+      };
+    }
+
+    return output;
+  }
+
+  public async get(cond: any = {}): Promise<T & {_id: string} | null> {
+    return (await this.find(cond))[0] || null;
+  }
+
   public async find(cond: any = {}): Promise<Array<T & {_id: string}>> {
     await this.emit("pre-find", {cond});
     const result = this._find(cond);
