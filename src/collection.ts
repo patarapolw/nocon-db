@@ -112,16 +112,19 @@ export class Collection<T> extends Emittery.Typed<{
   }
 
   public async getOrCreate(entry: T, cond?: any): Promise<T & {_id: string}> {
-    const es = await this.find(cond ? cond : entry);
+    await this.emit("pre-insert", {entries: [entry]});
+    const es = this._find(cond ? cond : entry);
 
     let output: T & {_id: string} = es[0];
     if (!es[0]) {
-      const _id = await this.insertOne(entry);
+      const _id = this._insert(entry);
       output = {
         ...entry,
         _id
       };
     }
+
+    await this.emit("post-insert", {entries: [output]});
 
     return output;
   }
